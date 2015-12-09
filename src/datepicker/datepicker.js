@@ -191,8 +191,12 @@ angular.module('ui.bootstrap.datepicker', ['ui.bootstrap.dateparser', 'ui.bootst
   // Key event mapper
   $scope.keys = { 13: 'enter', 32: 'space', 33: 'pageup', 34: 'pagedown', 35: 'end', 36: 'home', 37: 'left', 38: 'up', 39: 'right', 40: 'down' };
 
-  var focusElement = function() {
-    self.element[0].focus();
+  
+  var focusElement = function () {
+    var element = self.element.children(0);
+    if (element && element.focus) {
+      element.focus();
+    }
   };
 
   // Listen for focus requests from popup directive
@@ -228,7 +232,7 @@ angular.module('ui.bootstrap.datepicker', ['ui.bootstrap.dateparser', 'ui.bootst
   var DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
   this.step = { months: 1 };
-  this.element = $element;
+  this.element = $element.parent();
   function getDaysInMonth(year, month) {
     return month === 1 && year % 4 === 0 &&
       (year % 100 !== 0 || year % 400 === 0) ? 29 : DAYS_IN_MONTH[month];
@@ -251,48 +255,58 @@ angular.module('ui.bootstrap.datepicker', ['ui.bootstrap.dateparser', 'ui.bootst
   };
 
   this._refreshView = function() {
-    var year = this.activeDate.getFullYear(),
-      month = this.activeDate.getMonth(),
-      firstDayOfMonth = new Date(this.activeDate);
+    scope.monthCount = scope.monthCount || 1;
+    scope.views = Array.apply(null, { length: scope.monthCount }).map(function () {
+       return { };
+    });
+                    
+    for (var index = 0; index < scope.views.length; index++) {
+      var currentScope = scope.views[index],
+        currentMonth = (this.activeDate.getMonth() + 1 + index) % 12 - 1,
+        currentYear = this.activeDate.getFullYear() + parseInt((this.activeDate.getMonth() + 1 + index) / 12, 10),
+        currentActiveDate = new Date(currentYear, currentMonth, 1);
+    
+      var year = currentActiveDate.getFullYear(),
+        month = currentActiveDate.getMonth(),
+        firstDayOfMonth = currentActiveDate;
 
-    firstDayOfMonth.setFullYear(year, month, 1);
+      var difference = this.startingDay - firstDayOfMonth.getDay(),
+        numDisplayedFromPreviousMonth = difference > 0 ? 7 - difference : - difference,
+        firstDate = new Date(firstDayOfMonth);
 
-    var difference = this.startingDay - firstDayOfMonth.getDay(),
-      numDisplayedFromPreviousMonth = difference > 0 ?
-        7 - difference : - difference,
-      firstDate = new Date(firstDayOfMonth);
+      if (numDisplayedFromPreviousMonth > 0) {
+        firstDate.setDate(-numDisplayedFromPreviousMonth + 1);
+      }
 
-    if (numDisplayedFromPreviousMonth > 0) {
-      firstDate.setDate(-numDisplayedFromPreviousMonth + 1);
-    }
+      // 42 is the number of days on a six-week calendar
+      var days = this.getDates(firstDate, 42);
+      for (var i = 0; i < 42; i ++) {
+        days[i] = angular.extend(this.createDateObject(days[i], this.formatDay), {
+          secondary: days[i].getMonth() !== month,
+          uid: scope.uniqueId + '-' + i
+        });
+      }
 
-    // 42 is the number of days on a six-week calendar
-    var days = this.getDates(firstDate, 42);
-    for (var i = 0; i < 42; i ++) {
-      days[i] = angular.extend(this.createDateObject(days[i], this.formatDay), {
-        secondary: days[i].getMonth() !== month,
-        uid: scope.uniqueId + '-' + i
-      });
-    }
+      currentScope.labels = new Array(7);
+      for (var j = 0; j < 7; j++) {
+        currentScope.labels[j] = {
+          abbr: dateFilter(days[j].date, this.formatDayHeader),
+          full: dateFilter(days[j].date, 'EEEE')
+        };
+      }
 
-    scope.labels = new Array(7);
-    for (var j = 0; j < 7; j++) {
-      scope.labels[j] = {
-        abbr: dateFilter(days[j].date, this.formatDayHeader),
-        full: dateFilter(days[j].date, 'EEEE')
-      };
-    }
+      currentScope.title = dateFilter(currentActiveDate, this.formatDayTitle);
+      currentScope.rows = this.split(days, 7);
 
-    scope.title = dateFilter(this.activeDate, this.formatDayTitle);
-    scope.rows = this.split(days, 7);
-
-    if (scope.showWeeks) {
-      scope.weekNumbers = [];
-      var thursdayIndex = (4 + 7 - this.startingDay) % 7,
-          numWeeks = scope.rows.length;
-      for (var curWeek = 0; curWeek < numWeeks; curWeek++) {
-        scope.weekNumbers.push(
-          getISO8601WeekNumber(scope.rows[curWeek][thursdayIndex].date));
+      if (scope.showWeeks) {
+        currentScope.weekNumbers = [];
+        var thursdayIndex = (4 + 7 - this.startingDay) % 7,
+          numWeeks = currentScope.rows.length;
+        for (var curWeek = 0; curWeek < numWeeks; curWeek++) {
+          currentScope.weekNumbers.push(
+            getISO8601WeekNumber(currentScope.rows[curWeek][thursdayIndex].date)
+          );
+        }
       }
     }
   };
@@ -459,7 +473,8 @@ angular.module('ui.bootstrap.datepicker', ['ui.bootstrap.dateparser', 'ui.bootst
       datepickerMode: '=?',
       dateDisabled: '&',
       customClass: '&',
-      shortcutPropagation: '&?'
+      shortcutPropagation: '&?',
+      monthCount: '@'
     },
     require: ['uibDatepicker', '^ngModel'],
     controller: 'UibDatepickerController',
